@@ -44,8 +44,8 @@ export const Header: React.FC<HeaderProps> = ({
   notesCount
 }) => {
   return (
-    <header className="border-b-[2.5px] border-black bg-[#FFFFFF] px-4 sm:px-8 py-3.5 transition-colors">
-      <div className="flex flex-col gap-3">
+    <header className="w-full bg-white border-b-2 sm:border-b-[2.5px] border-black shadow-[0_4px_0px_#000000] sticky top-0 z-30 transition-colors">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-3.5 flex flex-col gap-3">
         {/* ROW 1: Logo, Search, and Main Actions */}
         <div className="flex items-center justify-between gap-3 flex-wrap sm:flex-nowrap">
           

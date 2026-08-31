@@ -445,6 +445,46 @@ export async function deleteSingleNoteFromSheets(webAppUrl: string, noteId: stri
 }
 
 /**
+ * Fetch global configuration from server (shared across all devices & users nationwide)
+ */
+export async function fetchServerGlobalConfig(): Promise<{ success: boolean; config?: any; error?: string }> {
+  try {
+    const res = await fetch('/api/global-config?_t=' + Date.now());
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const data = await res.json();
+    if (data && data.success && data.config) {
+      return { success: true, config: data.config };
+    }
+    return { success: false, error: 'Invalid response from server' };
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : String(err);
+    return { success: false, error: msg };
+  }
+}
+
+/**
+ * Save global configuration to server (so all devices and visitors automatically sync)
+ */
+export async function saveServerGlobalConfig(configUpdate: any): Promise<{ success: boolean; config?: any; error?: string }> {
+  try {
+    const res = await fetch('/api/global-config', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify(configUpdate)
+    });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const data = await res.json();
+    return { success: Boolean(data?.success), config: data?.config };
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : String(err);
+    console.warn('Failed to save global config to server:', msg);
+    return { success: false, error: msg };
+  }
+}
+
+/**
  * Test connectivity & Auto-init Spreadsheet
  */
 export async function testSheetsConnection(webAppUrl: string): Promise<{ success: boolean; message: string }> {

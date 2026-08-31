@@ -725,7 +725,7 @@ export const GoogleSheetsModal: React.FC<GoogleSheetsModalProps> = ({
                   <div className="p-2 bg-[#F0FDF4] border border-emerald-300 rounded-lg text-[10px] text-emerald-950 font-bold leading-relaxed flex items-start gap-2">
                     <ShieldCheck className="w-4 h-4 text-emerald-700 shrink-0 mt-0.5" />
                     <span>
-                      <strong>Proteksi Kunci Berlapis:</strong> URL Web App dan database tersimpan di perangkat Anda dengan enkripsi multi-layer (Multi-Pass Salted XOR + Checksum Vault). URL tidak tersimpan secara teks mentah, sehingga kredensial &amp; link spreadsheet Anda terlindungi dengan aman.
+                      <strong>⚡ Sinkronisasi Global Se-Indonesia Aktif:</strong> Cukup masukkan dan simpan URL Web App di 1 perangkat saja (misal di laptop atau HP admin), maka seluruh pengunjung dan perangkat di seluruh Indonesia akan langsung terhubung ke database Google Spreadsheet yang sama secara otomatis &amp; real-time!
                     </span>
                   </div>
                 </div>

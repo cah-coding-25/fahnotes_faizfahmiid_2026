@@ -500,7 +500,7 @@ function fetchSettings() {
   const data = sheet.getDataRange().getValues();
   const settings = {
     adminUsername: "Faiz_Fahmi_ID",
-    adminPassword: "admin",
+    adminPassword: "admin123",
     authorName: "Faiz_Fahmi_ID"
   };
   if (data.length <= 1) return settings;
@@ -548,7 +548,7 @@ function saveSettings(settingsObj) {
   formatHeaderRow(sheet, SETTINGS_HEADERS.length, "#818CF8");
 
   const username = String(settingsObj.adminUsername || settingsObj.Username || settingsObj.username || "Faiz_Fahmi_ID").trim();
-  const password = String(settingsObj.adminPassword || settingsObj.adminPasswordHash || settingsObj.Password || settingsObj.password || "admin").trim();
+  const password = String(settingsObj.adminPassword || settingsObj.adminPasswordHash || settingsObj.Password || settingsObj.password || "admin123").trim();
   const author = String(settingsObj.authorName || username || "Faiz_Fahmi_ID").trim();
   const now = new Date().toISOString();
 

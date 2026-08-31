@@ -15,8 +15,8 @@ export const Footer: React.FC<FooterProps> = ({
   onOpenLogin,
 }) => {
   return (
-    <footer className="mt-8 bg-white border-t-[2.5px] border-black py-4 px-4 sm:px-8 text-black">
-      <div className="flex flex-col sm:flex-row items-center justify-between gap-3 text-xs font-bold">
+    <footer className="w-full mt-12 bg-white border-t-2 sm:border-t-[2.5px] border-black py-5 text-black">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs font-bold">
         
         {/* Brand */}
         <div className="flex items-center gap-2">
@@ -24,6 +24,7 @@ export const Footer: React.FC<FooterProps> = ({
             <FileCode2 className="w-3.5 h-3.5 text-black" />
           </div>
           <span className="font-black text-black text-sm">fahnotes</span>
+          <span className="text-[10px] text-black/50 font-bold hidden sm:inline">• Catatan Kode &amp; Skrip Terpusat</span>
         </div>
 
         {/* Subtle disguise trigger */}
@@ -31,9 +32,9 @@ export const Footer: React.FC<FooterProps> = ({
           <div className="flex items-center gap-2">
             <button
               onClick={onOpenLogin}
-              className="text-[11px] font-medium text-black/60 hover:text-black hover:underline cursor-pointer select-none"
+              className="text-[11px] font-bold text-black/70 hover:text-black hover:underline cursor-pointer select-none"
             >
-              by:Faiz_Fahmi_ID
+              by: Faiz_Fahmi_ID
             </button>
           </div>
         ) : null}
