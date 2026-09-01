@@ -1,6 +1,6 @@
 {
-  "name": "ZIP to PSD — by faiz_fahmi_id",
-  "description": "Konversi arsip ZIP menjadi file Adobe Photoshop PSD berlapis presisi tinggi oleh Faiz_Fahmi_ID sejak 2026.",
+  "name": "fahnotes",
+  "description": "Aplikasi catatan dan code snippet ala Google Colab & Notion by Faiz_Fahmi_ID",
   "requestFramePermissions": [],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }
