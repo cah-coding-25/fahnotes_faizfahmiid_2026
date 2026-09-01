@@ -60,9 +60,14 @@ function readGlobalConfig(): GlobalConfig {
 function writeGlobalConfig(config: Partial<GlobalConfig>): GlobalConfig {
   try {
     const current = readGlobalConfig();
+    const newUrl = (config.googleSheetsWebAppUrl && typeof config.googleSheetsWebAppUrl === 'string' && config.googleSheetsWebAppUrl.trim().startsWith('http'))
+      ? config.googleSheetsWebAppUrl.trim()
+      : current.googleSheetsWebAppUrl;
+
     const updated: GlobalConfig = {
       ...current,
       ...config,
+      googleSheetsWebAppUrl: newUrl,
       updatedAt: new Date().toISOString(),
       version: (current.version || 1) + 1
     };

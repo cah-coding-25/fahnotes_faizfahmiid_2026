@@ -47,9 +47,14 @@ export default async function handler(req, res) {
     try {
       const incoming = typeof req.body === 'string' ? JSON.parse(req.body) : req.body;
       if (incoming && typeof incoming === 'object') {
+        const newUrl = (incoming.googleSheetsWebAppUrl && typeof incoming.googleSheetsWebAppUrl === 'string' && incoming.googleSheetsWebAppUrl.trim().startsWith('http'))
+          ? incoming.googleSheetsWebAppUrl.trim()
+          : cachedConfig.googleSheetsWebAppUrl;
+
         cachedConfig = {
           ...cachedConfig,
           ...incoming,
+          googleSheetsWebAppUrl: newUrl,
           updatedAt: new Date().toISOString(),
           version: (cachedConfig.version || 1) + 1
         };

@@ -1,6 +1,8 @@
 import React, { useState } from 'react';
-import { Note, CodeBlock, FileBlock, LinkBlock } from '../types';
+import { Note, CodeBlock, FileBlock, LinkBlock, AppSettings } from '../types';
 import { formatImageUrl, triggerDirectDownload, isGoogleDriveUrl } from '../utils/driveHelper';
+import { ShareModal } from './ShareModal';
+import { triggerSmartShare } from '../utils/shareHelper';
 import ReactMarkdown from 'react-markdown';
 import confetti from 'canvas-confetti';
 import { 
@@ -17,15 +19,134 @@ import {
   Zap,
   ExternalLink,
   Lock,
-  Globe
+  Globe,
+  Eye,
+  Trash2,
+  Code,
+  FileCode,
+  Database
 } from 'lucide-react';
+
+const getFileInfo = (filename: string, code: string) => {
+  const lower = filename.toLowerCase();
+  const bytes = new Blob([code || '']).size;
+  let sizeStr = `${bytes} B`;
+  if (bytes >= 1024 * 1024) sizeStr = `${(bytes / (1024 * 1024)).toFixed(2)} MB`;
+  else if (bytes >= 1024) sizeStr = `${(bytes / 1024).toFixed(1)} KB`;
+
+  const lines = code ? code.split('\n').length : 0;
+  
+  if (lower.endsWith('.html') || lower.endsWith('.htm')) {
+    return {
+      typeLabel: 'Dokumen Web HTML',
+      badge: 'HTML',
+      badgeBg: 'bg-[#FFEDD5]',
+      icon: <Globe className="w-5 h-5 text-orange-950 stroke-[2.5]" />,
+      sizeStr,
+      lines
+    };
+  }
+  if (lower.endsWith('.bat') || lower.endsWith('.cmd')) {
+    return {
+      typeLabel: 'Windows Batch Script',
+      badge: 'BAT SCRIPT',
+      badgeBg: 'bg-[#FEF08A]',
+      icon: <Terminal className="w-5 h-5 text-amber-950 stroke-[2.5]" />,
+      sizeStr,
+      lines
+    };
+  }
+  if (lower.endsWith('.py')) {
+    return {
+      typeLabel: 'Python Script File',
+      badge: 'PYTHON',
+      badgeBg: 'bg-[#DBEAFE]',
+      icon: <FileCode className="w-5 h-5 text-blue-950 stroke-[2.5]" />,
+      sizeStr,
+      lines
+    };
+  }
+  if (lower.endsWith('.js') || lower.endsWith('.mjs')) {
+    return {
+      typeLabel: 'JavaScript Source File',
+      badge: 'JAVASCRIPT',
+      badgeBg: 'bg-[#FEF08A]',
+      icon: <Code className="w-5 h-5 text-yellow-950 stroke-[2.5]" />,
+      sizeStr,
+      lines
+    };
+  }
+  if (lower.endsWith('.ts') || lower.endsWith('.tsx')) {
+    return {
+      typeLabel: 'TypeScript Source File',
+      badge: 'TYPESCRIPT',
+      badgeBg: 'bg-[#E0F2FE]',
+      icon: <Code className="w-5 h-5 text-sky-950 stroke-[2.5]" />,
+      sizeStr,
+      lines
+    };
+  }
+  if (lower.endsWith('.css')) {
+    return {
+      typeLabel: 'Cascading Style Sheets',
+      badge: 'CSS',
+      badgeBg: 'bg-[#E0E7FF]',
+      icon: <FileText className="w-5 h-5 text-indigo-950 stroke-[2.5]" />,
+      sizeStr,
+      lines
+    };
+  }
+  if (lower.endsWith('.sh') || lower.endsWith('.bash')) {
+    return {
+      typeLabel: 'Linux Shell Script',
+      badge: 'BASH / SH',
+      badgeBg: 'bg-[#F3E8FF]',
+      icon: <Terminal className="w-5 h-5 text-purple-950 stroke-[2.5]" />,
+      sizeStr,
+      lines
+    };
+  }
+  if (lower.endsWith('.json')) {
+    return {
+      typeLabel: 'JSON Data Structure',
+      badge: 'JSON',
+      badgeBg: 'bg-[#D1FAE5]',
+      icon: <FileCode className="w-5 h-5 text-emerald-950 stroke-[2.5]" />,
+      sizeStr,
+      lines
+    };
+  }
+  if (lower.endsWith('.sql')) {
+    return {
+      typeLabel: 'Database SQL Query',
+      badge: 'SQL',
+      badgeBg: 'bg-[#FFE4E6]',
+      icon: <Database className="w-5 h-5 text-rose-950 stroke-[2.5]" />,
+      sizeStr,
+      lines
+    };
+  }
+
+  const parts = filename.split('.');
+  const ext = parts.length > 1 ? parts.pop()?.toUpperCase() : 'FILE';
+  return {
+    typeLabel: `Berkas File .${ext}`,
+    badge: ext,
+    badgeBg: 'bg-[#FAF5EE]',
+    icon: <FileCode className="w-5 h-5 text-zinc-950 stroke-[2.5]" />,
+    sizeStr,
+    lines
+  };
+};
 
 interface NoteViewerProps {
   note: Note;
   isAdmin: boolean;
   onBack: () => void;
   onEdit: (note: Note) => void;
+  onDelete?: (id: string) => void;
   onShowToast: (msg: string, type?: 'success' | 'error' | 'info') => void;
+  settings?: Partial<AppSettings>;
 }
 
 export const NoteViewer: React.FC<NoteViewerProps> = ({
@@ -33,16 +154,28 @@ export const NoteViewer: React.FC<NoteViewerProps> = ({
   isAdmin,
   onBack,
   onEdit,
+  onDelete,
   onShowToast,
+  settings,
 }) => {
   const [copiedBlockId, setCopiedBlockId] = useState<string | null>(null);
+  const [previewHtmlBlockIds, setPreviewHtmlBlockIds] = useState<Record<string, boolean>>({});
+  const [isShareModalOpen, setIsShareModalOpen] = useState<boolean>(false);
   const coverUrl = note.coverImage ? formatImageUrl(note.coverImage) : null;
+
+  const toggleHtmlPreview = (blockId: string) => {
+    setPreviewHtmlBlockIds((prev) => ({
+      ...prev,
+      [blockId]: !prev[blockId]
+    }));
+  };
 
   const handleCopyCode = async (block: CodeBlock) => {
     try {
       await navigator.clipboard.writeText(block.code);
       setCopiedBlockId(block.id);
-      onShowToast(`Kode "${block.title || 'snippet'}" disalin!`, 'success');
+      confetti({ particleCount: 20, spread: 40, origin: { y: 0.8 } });
+      onShowToast(`Kode "${block.title || 'snippet'}" berhasil disalin!`, 'success');
       setTimeout(() => setCopiedBlockId(null), 2000);
     } catch {
       onShowToast('Gagal menyalin kode', 'error');
@@ -50,8 +183,22 @@ export const NoteViewer: React.FC<NoteViewerProps> = ({
   };
 
   const handleDownloadCodeFile = (block: CodeBlock) => {
-    const filename = block.title || `snippet.${block.language || 'txt'}`;
-    const blob = new Blob([block.code], { type: 'text/plain;charset=utf-8' });
+    const filename = block.title ? block.title.trim() : `file_script.txt`;
+    
+    // Determine MIME type based on extension
+    let mimeType = 'text/plain;charset=utf-8';
+    const lower = filename.toLowerCase();
+    if (lower.endsWith('.html') || lower.endsWith('.htm')) mimeType = 'text/html;charset=utf-8';
+    else if (lower.endsWith('.css')) mimeType = 'text/css;charset=utf-8';
+    else if (lower.endsWith('.js') || lower.endsWith('.mjs')) mimeType = 'application/javascript;charset=utf-8';
+    else if (lower.endsWith('.json')) mimeType = 'application/json;charset=utf-8';
+    else if (lower.endsWith('.py')) mimeType = 'text/x-python;charset=utf-8';
+    else if (lower.endsWith('.bat') || lower.endsWith('.cmd')) mimeType = 'application/x-bat;charset=utf-8';
+    else if (lower.endsWith('.sh') || lower.endsWith('.bash')) mimeType = 'application/x-sh;charset=utf-8';
+    else if (lower.endsWith('.svg')) mimeType = 'image/svg+xml;charset=utf-8';
+    else if (lower.endsWith('.xml')) mimeType = 'application/xml;charset=utf-8';
+
+    const blob = new Blob([block.code], { type: mimeType });
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url;
@@ -60,7 +207,9 @@ export const NoteViewer: React.FC<NoteViewerProps> = ({
     link.click();
     document.body.removeChild(link);
     URL.revokeObjectURL(url);
-    onShowToast(`File ${filename} diunduh!`, 'success');
+
+    confetti({ particleCount: 30, spread: 50, origin: { y: 0.7 } });
+    onShowToast(`File "${filename}" berhasil diunduh!`, 'success');
   };
 
   const handleDownloadAttachment = (url: string, suggestedName?: string) => {
@@ -74,17 +223,13 @@ export const NoteViewer: React.FC<NoteViewerProps> = ({
     }
   };
 
-  const handleShareNote = async () => {
-    const shareUrl = `${window.location.origin}${window.location.pathname}?note=${note.id}`;
-    try {
-      if (navigator.clipboard) {
-        await navigator.clipboard.writeText(shareUrl);
-      }
-      confetti({ particleCount: 25, spread: 45, origin: { y: 0.8 } });
-      onShowToast('Link catatan berhasil disalin!', 'success');
-    } catch {
-      onShowToast(`Link: ${shareUrl}`, 'info');
-    }
+  const handleShareNote = () => {
+    triggerSmartShare({
+      note,
+      settings,
+      onShowToast,
+      onOpenModalFallback: () => setIsShareModalOpen(true),
+    });
   };
 
   const formattedDate = new Date(note.createdAt).toLocaleDateString('id-ID', {
@@ -107,18 +252,31 @@ export const NoteViewer: React.FC<NoteViewerProps> = ({
 
         <div className="flex items-center gap-2">
           {isAdmin && (
-            <button 
-              onClick={() => onEdit(note)} 
-              className="nb-btn bg-[#2DD4BF] hover:bg-[#5EEAD4] text-black px-3 py-1.5 text-xs font-black gap-1.5"
-            >
-              <Edit3 className="w-4 h-4 stroke-[2.5]" />
-              <span>Edit Catatan</span>
-            </button>
+            <>
+              <button 
+                onClick={() => onEdit(note)} 
+                className="nb-btn bg-[#2DD4BF] hover:bg-[#5EEAD4] text-black px-3 py-1.5 text-xs font-black gap-1.5 border-2 border-black shadow-[2px_2px_0px_#000]"
+                title="Edit Catatan Ini"
+              >
+                <Edit3 className="w-4 h-4 stroke-[2.5]" />
+                <span>Edit Catatan</span>
+              </button>
+              {onDelete && (
+                <button 
+                  onClick={() => onDelete(note.id)} 
+                  className="nb-btn bg-[#FFE4E6] hover:bg-[#FDA4AF] text-black px-3 py-1.5 text-xs font-black gap-1.5 border-2 border-black shadow-[2px_2px_0px_#000]"
+                  title="Hapus Catatan Ini Secara Permanen"
+                >
+                  <Trash2 className="w-4 h-4 stroke-[2.5]" />
+                  <span>Hapus</span>
+                </button>
+              )}
+            </>
           )}
 
           <button 
             onClick={handleShareNote} 
-            className="nb-btn bg-[#FFD233] hover:bg-[#FFE066] text-black px-3.5 py-1.5 text-xs font-black gap-1.5"
+            className="nb-btn bg-[#FFD233] hover:bg-[#FFE066] text-black px-3.5 py-1.5 text-xs font-black gap-1.5 border-2 border-black shadow-[2px_2px_0px_#000]"
           >
             <Share2 className="w-4 h-4 stroke-[2.5]" />
             <span>Bagikan</span>
@@ -234,33 +392,126 @@ export const NoteViewer: React.FC<NoteViewerProps> = ({
             }
 
             if (block.type === 'code') {
-              const lines = block.code.split('\n');
+              const lines = block.code ? block.code.split('\n') : [];
               const isCopied = copiedBlockId === block.id;
+              const filename = block.title ? block.title.trim() : `file_script_${index + 1}.txt`;
+              const isHtml = filename.toLowerCase().endsWith('.html') || filename.toLowerCase().endsWith('.htm');
+              const isPreviewingWeb = previewHtmlBlockIds[block.id] || false;
+              const fileInfo = getFileInfo(filename, block.code);
 
-              return (
-                <div key={block.id} className="nb-box-sm overflow-hidden bg-black text-white border-2 border-black shadow-[3px_3px_0px_#000]">
-                  {/* Code Header */}
-                  <div className="flex items-center justify-between px-3 py-1.5 bg-[#18181B] border-b-2 border-black text-xs">
-                    <div className="flex items-center gap-2 overflow-hidden">
-                      <Terminal className="w-4 h-4 text-[#FFD233] shrink-0" />
-                      <span className="font-mono font-bold text-white text-xs truncate">
-                        {block.title || `code_snippet_${index + 1}`}
-                      </span>
+              // Extract extension for badge
+              const parts = filename.split('.');
+              const ext = parts.length > 1 ? parts.pop()?.toUpperCase() : 'CODE';
+
+              // =========================================================================
+              // 🔒 MODE TERTUTUP (KODE DISEMBUNYIKAN - HANYA TOMBOL DOWNLOAD & INFO FILE)
+              // =========================================================================
+              if (block.hideCode) {
+                return (
+                  <div key={block.id} className="nb-box p-4 sm:p-5 bg-white border-2 border-black rounded-xl shadow-[4px_4px_0px_#000] space-y-3.5">
+                    {/* Top Row: File Icon, Name, Category & Type Info */}
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="flex items-center gap-3.5 min-w-0">
+                        <div className={`w-12 h-12 rounded-xl border-2 border-black flex items-center justify-center shrink-0 ${fileInfo.badgeBg} shadow-[2px_2px_0px_#000]`}>
+                          {fileInfo.icon}
+                        </div>
+                        <div className="min-w-0">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span className="font-mono font-black text-sm sm:text-base text-black tracking-tight truncate max-w-[240px] sm:max-w-md" title={filename}>
+                              {filename}
+                            </span>
+                            <span className={`px-2 py-0.5 rounded text-[10px] font-black border border-black ${fileInfo.badgeBg} text-black uppercase`}>
+                              {fileInfo.badge}
+                            </span>
+                          </div>
+                          {block.description && (
+                            <p className="text-[11px] font-bold text-black/70 mt-0.5">
+                              {block.description}
+                            </p>
+                          )}
+                        </div>
+                      </div>
+
+                      <div className="hidden sm:flex items-center gap-1.5 shrink-0">
+                        <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-[#FAF5EE] border border-black text-[10px] font-black text-black">
+                          <Lock className="w-3 h-3 text-black stroke-[2.5]" />
+                          <span>Berkas Siap Unduh</span>
+                        </span>
+                      </div>
                     </div>
 
-                    <div className="flex items-center gap-1.5 shrink-0">
+                    {/* Bottom Row: Prominent Direct Download Button & Copy Code Action */}
+                    <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5 pt-2 border-t-2 border-black/10">
                       <button
                         onClick={() => handleDownloadCodeFile(block)}
-                        className="nb-btn px-2 py-0.5 text-[10px] bg-white text-black border border-black hover:bg-[#FAF5EE] font-bold"
-                        title="Unduh File"
+                        className="nb-btn flex-1 bg-[#FFD233] hover:bg-[#FFE066] text-black font-black text-xs sm:text-sm py-2.5 px-4 gap-2 border-2 border-black shadow-[2px_2px_0px_#000]"
+                        title={`Unduh file ${filename}`}
                       >
-                        <Download className="w-3 h-3 text-black" />
-                        <span className="hidden sm:inline text-black">Unduh</span>
+                        <Download className="w-4 h-4 stroke-[3] text-black shrink-0" />
+                        <span>Unduh Berkas <strong>{filename}</strong></span>
                       </button>
 
                       <button
                         onClick={() => handleCopyCode(block)}
-                        className={`nb-btn px-2.5 py-0.5 text-[10px] font-black border border-black ${
+                        className={`nb-btn px-4 py-2.5 text-xs font-black border-2 border-black ${
+                          isCopied ? 'bg-[#BBF7D0] text-black' : 'bg-white hover:bg-[#FAF5EE] text-black'
+                        }`}
+                        title="Salin isi kode tanpa membuka tampilan"
+                      >
+                        {isCopied ? <Check className="w-3.5 h-3.5 stroke-[3] text-black" /> : <Copy className="w-3.5 h-3.5 stroke-[2.5] text-black" />}
+                        <span>{isCopied ? 'Tersalin!' : 'Salin Kode'}</span>
+                      </button>
+                    </div>
+                  </div>
+                );
+              }
+
+              // =========================================================================
+              // 💻 MODE TERBUKA (TAMPILKAN KODE DI TERMINAL & TOMBOL DOWNLOAD)
+              // =========================================================================
+              return (
+                <div key={block.id} className="nb-box-sm overflow-hidden bg-black text-white border-2 border-black shadow-[3px_3px_0px_#000]">
+                  {/* Code Header */}
+                  <div className="flex flex-wrap items-center justify-between gap-2 px-3 py-2 bg-[#18181B] border-b-2 border-black text-xs">
+                    <div className="flex items-center gap-2 overflow-hidden max-w-[60%] sm:max-w-none">
+                      <Terminal className="w-4 h-4 text-[#FFD233] shrink-0" />
+                      <span className="font-mono font-black text-white text-xs truncate" title={filename}>
+                        {filename}
+                      </span>
+                      <span className="nb-badge bg-[#27272A] text-[#FFD233] text-[9px] font-mono font-bold px-1.5 py-0.5 border border-zinc-700">
+                        .{ext}
+                      </span>
+                    </div>
+
+                    <div className="flex items-center gap-1.5 shrink-0 flex-wrap">
+                      {/* Web View Toggle for HTML files */}
+                      {isHtml && (
+                        <button
+                          onClick={() => toggleHtmlPreview(block.id)}
+                          className={`nb-btn px-2.5 py-1 text-[10px] font-black border border-black ${
+                            isPreviewingWeb ? 'bg-[#38BDF8] text-black' : 'bg-zinc-800 text-white hover:bg-zinc-700'
+                          }`}
+                          title={isPreviewingWeb ? 'Tampilkan Kode Sumber' : 'Tampilkan Hasil Tampilan Website HTML'}
+                        >
+                          <Globe className="w-3 h-3 text-black" />
+                          <span>{isPreviewingWeb ? 'Lihat Kode' : 'Tampilan Website'}</span>
+                        </button>
+                      )}
+
+                      {/* Direct Download Button */}
+                      <button
+                        onClick={() => handleDownloadCodeFile(block)}
+                        className="nb-btn px-2.5 py-1 text-[10px] bg-white text-black border border-black hover:bg-[#FAF5EE] font-black gap-1"
+                        title={`Unduh file ${filename}`}
+                      >
+                        <Download className="w-3 h-3 text-black stroke-[2.5]" />
+                        <span>Unduh <strong className="font-mono">{filename}</strong></span>
+                      </button>
+
+                      {/* Copy Code Button */}
+                      <button
+                        onClick={() => handleCopyCode(block)}
+                        className={`nb-btn px-2.5 py-1 text-[10px] font-black border border-black ${
                           isCopied ? 'bg-[#BBF7D0] text-black' : 'bg-[#FFD233] text-black hover:bg-[#FFE066]'
                         }`}
                       >
@@ -270,19 +521,36 @@ export const NoteViewer: React.FC<NoteViewerProps> = ({
                     </div>
                   </div>
 
-                  {/* Code Snippet Box */}
-                  <div className="p-3.5 overflow-x-auto font-mono text-xs text-[#4ADE80] bg-[#09090B]">
-                    <pre className="flex">
-                      {block.showLineNumbers !== false && (
-                        <div className="select-none pr-3 text-right text-zinc-600 font-mono border-r border-zinc-800 mr-3">
-                          {lines.map((_, i) => (
-                            <div key={i}>{i + 1}</div>
-                          ))}
-                        </div>
-                      )}
-                      <code className="flex-1 whitespace-pre leading-relaxed">{block.code}</code>
-                    </pre>
-                  </div>
+                  {/* Render Area: HTML Live Web Preview OR Code Snippet */}
+                  {isHtml && isPreviewingWeb ? (
+                    <div className="p-3 bg-zinc-900 border-t border-zinc-800 space-y-2">
+                      <div className="flex items-center justify-between text-[11px] text-zinc-400 font-mono">
+                        <span className="flex items-center gap-1.5 text-[#38BDF8] font-bold">
+                          <Eye className="w-3.5 h-3.5 text-[#38BDF8]" /> Live Render Sandbox: {filename}
+                        </span>
+                        <span className="text-[10px] text-zinc-500">Preview Interaktif</span>
+                      </div>
+                      <iframe
+                        srcDoc={block.code}
+                        title={`Preview of ${filename}`}
+                        className="w-full h-80 bg-white border-2 border-black rounded-xl shadow-inner"
+                        sandbox="allow-scripts"
+                      />
+                    </div>
+                  ) : (
+                    <div className="p-3.5 overflow-x-auto font-mono text-xs text-[#4ADE80] bg-[#09090B]">
+                      <pre className="flex">
+                        {block.showLineNumbers !== false && (
+                          <div className="select-none pr-3 text-right text-zinc-600 font-mono border-r border-zinc-800 mr-3">
+                            {lines.map((_, i) => (
+                              <div key={i}>{i + 1}</div>
+                            ))}
+                          </div>
+                        )}
+                        <code className="flex-1 whitespace-pre leading-relaxed">{block.code}</code>
+                      </pre>
+                    </div>
+                  )}
                 </div>
               );
             }
@@ -412,6 +680,14 @@ export const NoteViewer: React.FC<NoteViewerProps> = ({
           </button>
         </div>
       </article>
+
+      {/* Interactive Per-Device Share Dataset Modal */}
+      <ShareModal
+        note={note}
+        isOpen={isShareModalOpen}
+        onClose={() => setIsShareModalOpen(false)}
+        onShowToast={onShowToast}
+      />
     </div>
   );
 };

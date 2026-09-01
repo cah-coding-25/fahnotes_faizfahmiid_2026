@@ -1,5 +1,5 @@
 import React from 'react';
-import { Note } from '../types';
+import { Note, CodeBlock } from '../types';
 import { 
   FileCode2, 
   Download, 
@@ -13,7 +13,8 @@ import {
   Edit,
   Trash2,
   Lock,
-  Eye
+  Eye,
+  Share2
 } from 'lucide-react';
 
 interface NoteCardProps {
@@ -21,6 +22,7 @@ interface NoteCardProps {
   onClick: () => void;
   onEdit?: () => void;
   onDelete?: () => void;
+  onShare?: (note: Note) => void;
   isAdmin: boolean;
 }
 
@@ -29,6 +31,7 @@ export const NoteCard: React.FC<NoteCardProps> = ({
   onClick,
   onEdit,
   onDelete,
+  onShare,
   isAdmin
 }) => {
   // Determine icon & theme color based on category
@@ -96,9 +99,38 @@ export const NoteCard: React.FC<NoteCardProps> = ({
         </h3>
 
         {/* Note Description */}
-        <p className="text-xs font-bold text-black/75 line-clamp-3 leading-relaxed mb-4">
+        <p className="text-xs font-bold text-black/75 line-clamp-3 leading-relaxed mb-3">
           {note.description || 'Klik untuk membuka rincian catatan dan source code snippet.'}
         </p>
+
+        {/* File Snippet Badges */}
+        {(note.blocks || []).some(b => b.type === 'code' && (b as CodeBlock).title) && (
+          <div className="flex items-center gap-1.5 flex-wrap mb-3">
+            {(note.blocks || [])
+              .filter(b => b.type === 'code' && (b as CodeBlock).title)
+              .slice(0, 3)
+              .map((b, idx) => {
+                const codeBlock = b as CodeBlock;
+                return (
+                  <span 
+                    key={idx} 
+                    className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-md border border-black text-[10px] font-mono font-bold ${
+                      codeBlock.hideCode 
+                        ? 'bg-[#E0F2FE] text-black' 
+                        : 'bg-[#FAF5EE] text-black'
+                    }`}
+                  >
+                    {codeBlock.hideCode ? (
+                      <Download className="w-2.5 h-2.5 text-black stroke-[2.5]" />
+                    ) : (
+                      <Terminal className="w-2.5 h-2.5 text-black stroke-[2.5]" />
+                    )}
+                    <span className="truncate max-w-[120px]">{codeBlock.title}</span>
+                  </span>
+                );
+              })}
+          </div>
+        )}
       </div>
 
       {/* Footer Area: Meta tags and Actions */}
@@ -123,10 +155,20 @@ export const NoteCard: React.FC<NoteCardProps> = ({
           </span>
         </div>
 
-        {/* Admin Quick Buttons or Open Badge */}
-        <div className="flex items-center gap-1">
+        {/* Actions: Share, Admin Buttons, Open */}
+        <div className="flex items-center gap-1.5" onClick={(e) => e.stopPropagation()}>
+          {onShare && (
+            <button
+              onClick={() => onShare(note)}
+              className="nb-btn bg-white hover:bg-[#FFD233] text-black p-1.5 rounded-lg shadow-[1px_1px_0px_#000] border border-black transition-colors"
+              title="Bagikan Catatan (Pilihan Sesuai Perangkat)"
+            >
+              <Share2 className="w-3.5 h-3.5 text-black stroke-[2.5]" />
+            </button>
+          )}
+
           {isAdmin ? (
-            <div className="flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center gap-1">
               {onEdit && (
                 <button
                   onClick={onEdit}
@@ -147,9 +189,12 @@ export const NoteCard: React.FC<NoteCardProps> = ({
               )}
             </div>
           ) : (
-            <span className="nb-btn bg-[#FAF5EE] text-black px-2.5 py-1 text-[10px] font-black group-hover:bg-[#FFD233] transition-colors border border-black">
+            <button 
+              onClick={onClick}
+              className="nb-btn bg-[#FAF5EE] text-black px-2.5 py-1 text-[10px] font-black group-hover:bg-[#FFD233] transition-colors border border-black"
+            >
               Buka →
-            </span>
+            </button>
           )}
         </div>
       </div>

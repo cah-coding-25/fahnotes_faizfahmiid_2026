@@ -14,6 +14,8 @@ import {
   syncFromGoogleSheets, 
   syncAllToGoogleSheets,
   testSheetsConnection,
+  saveSingleNoteToSheets,
+  deleteSingleNoteFromSheets,
   saveAdminCredentialsToSheets,
   saveCategoriesToSheets,
   fetchServerGlobalConfig,
@@ -27,6 +29,8 @@ import { NoteViewer } from './components/NoteViewer';
 import { NoteEditor } from './components/NoteEditor';
 import { LoginModal } from './components/LoginModal';
 import { GoogleSheetsModal } from './components/GoogleSheetsModal';
+import { ShareModal } from './components/ShareModal';
+import { triggerSmartShare } from './utils/shareHelper';
 import { Footer } from './components/Footer';
 import { VectorDecorations } from './components/VectorDecorations';
 import { ToastContainer, ToastMessage } from './components/Toast';
@@ -63,6 +67,7 @@ export default function App() {
   const [isLoginOpen, setIsLoginOpen] = useState(false);
   const [isSheetsModalOpen, setIsSheetsModalOpen] = useState(false);
   const [sheetsModalTab, setSheetsModalTab] = useState<'categories' | 'account' | 'database' | 'github_vercel'>('categories');
+  const [shareModalNote, setShareModalNote] = useState<Note | null>(null);
   const [isSyncing, setIsSyncing] = useState(false);
   const [isInitialLoading, setIsInitialLoading] = useState(true);
   const [loadingText, setLoadingText] = useState('Memuat data, harap tunggu...');
@@ -541,25 +546,54 @@ export default function App() {
     const exists = notes.some((n) => n.id === savedNote.id);
     if (exists) {
       updated = notes.map((n) => (n.id === savedNote.id ? savedNote : n));
-      addToast('Catatan diperbarui!', 'success');
+      addToast('Catatan berhasil diperbarui!', 'success');
     } else {
       updated = [savedNote, ...notes];
-      addToast('Catatan baru ditambahkan!', 'success');
+      addToast('Catatan baru berhasil ditambahkan!', 'success');
       confetti({ particleCount: 35, spread: 60, origin: { y: 0.6 } });
     }
 
     handleUpdateNotes(updated);
     setSelectedNote(savedNote);
     setViewMode('viewer');
+
+    // Automatic Direct CRUD Sync to Google Spreadsheet
+    if (settings.googleSheetsWebAppUrl) {
+      saveSingleNoteToSheets(settings.googleSheetsWebAppUrl, savedNote)
+        .then((res) => {
+          if (res.success) {
+            console.log('Single note upserted to Google Sheets:', savedNote.id);
+          }
+        })
+        .catch((err) => {
+          console.warn('Background single note sync:', err);
+        });
+    }
   };
 
   const handleDeleteNote = (id: string) => {
-    if (window.confirm('Hapus catatan ini secara permanen?')) {
+    const targetNote = notes.find((n) => n.id === id);
+    const noteTitle = targetNote?.title || 'Catatan';
+    if (window.confirm(`Hapus catatan "${noteTitle}" secara permanen?`)) {
       const updated = notes.filter((n) => n.id !== id);
       handleUpdateNotes(updated);
-      addToast('Catatan berhasil dihapus!', 'info');
+      addToast(`Catatan "${noteTitle}" berhasil dihapus!`, 'info');
+      
       if (selectedNote?.id === id) {
         handleBackToList();
+      }
+
+      // Automatic Direct CRUD Delete in Google Spreadsheet
+      if (settings.googleSheetsWebAppUrl) {
+        deleteSingleNoteFromSheets(settings.googleSheetsWebAppUrl, id)
+          .then((res) => {
+            if (res.success) {
+              console.log('Single note deleted from Google Sheets:', id);
+            }
+          })
+          .catch((err) => {
+            console.warn('Background note delete sync:', err);
+          });
       }
     }
   };
@@ -681,6 +715,25 @@ export default function App() {
     }, 0);
   }, [notes]);
 
+  const handleUpdateSettings = (updated: Partial<AppSettings>) => {
+    const merged: AppSettings = {
+      ...settings,
+      ...updated,
+    };
+    setSettings(merged);
+    saveLocalSettings(merged);
+    addToast('Pengaturan nozzle bagikan berhasil diperbarui!', 'success');
+  };
+
+  const handleShareNote = (targetNote: Note) => {
+    triggerSmartShare({
+      note: targetNote,
+      settings,
+      onShowToast: addToast,
+      onOpenModalFallback: () => setShareModalNote(targetNote),
+    });
+  };
+
   return (
     <div className="min-h-screen bg-[#FAF5EE] text-black font-sans relative overflow-x-hidden selection:bg-[#FFD233] selection:text-black flex flex-col justify-between">
       {/* Neobrutalist Full-Screen Loading Transition when syncing/loading from Google Spreadsheet */}
@@ -736,7 +789,9 @@ export default function App() {
             isAdmin={isAdmin}
             onBack={handleBackToList}
             onEdit={handleStartEditNote}
+            onDelete={handleDeleteNote}
             onShowToast={addToast}
+            settings={settings}
           />
         )}
 
@@ -831,6 +886,7 @@ export default function App() {
                     onClick={() => handleOpenNote(note)}
                     onEdit={() => handleStartEditNote(note)}
                     onDelete={() => handleDeleteNote(note.id)}
+                    onShare={(targetNote) => handleShareNote(targetNote)}
                     isAdmin={isAdmin}
                   />
                 ))}
@@ -935,7 +991,18 @@ export default function App() {
           onSyncCategoriesToSheets={handleSyncCategoriesToSheets}
           settings={settings}
           onUpdateAdminCredentials={handleUpdateAdminCredentials}
+          onUpdateSettings={handleUpdateSettings}
           initialTab={sheetsModalTab}
+        />
+      )}
+
+      {/* Interactive Per-Device Share Dataset Modal (Home / Cards) */}
+      {shareModalNote && (
+        <ShareModal
+          note={shareModalNote}
+          isOpen={Boolean(shareModalNote)}
+          onClose={() => setShareModalNote(null)}
+          onShowToast={addToast}
         />
       )}
 

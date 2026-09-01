@@ -34,6 +34,8 @@ export interface CodeBlock extends BaseBlock {
   language: CodeLanguage;
   code: string;
   showLineNumbers?: boolean;
+  hideCode?: boolean; // If true, code snippet is closed/hidden, only showing file info and download button
+  description?: string; // Optional subtitle / note for this file
 }
 
 export interface ImageBlock extends BaseBlock {
@@ -86,4 +88,8 @@ export interface AppSettings {
   authorName: string;
   theme?: 'light' | 'dark';
   categories?: string[];
+  // Share Nozzle / Switches
+  preferNativeShare?: boolean; // Default true: Wajib gunakan menu share bawaan HP/OS, jangan buat popup website di HP
+  enableWebsiteShareModal?: boolean; // Default true: Tampilkan modal website interaktif di Desktop/PC
+  autoCopyToClipboard?: boolean; // Default true: Salin otomatis jika native share tidak didukung
 }

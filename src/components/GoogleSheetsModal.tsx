@@ -25,12 +25,21 @@ import {
   ShieldCheck,
   Plus,
   Edit3,
-  Shield
+  Shield,
+  Download,
+  Share2,
+  Smartphone,
+  Laptop,
+  ToggleLeft,
+  ToggleRight,
+  Sliders,
+  QrCode
 } from 'lucide-react';
 import { CODE_GS_SCRIPT } from '../utils/codeGsScript';
 import { AppSettings, Note } from '../types';
 import { maskSensitiveUrl } from '../utils/securityVault';
 import { generateAutoConnectLink } from '../utils/cloudSyncRelay';
+import { triggerSmartShare } from '../utils/shareHelper';
 
 interface GoogleSheetsModalProps {
   isOpen: boolean;
@@ -54,7 +63,8 @@ interface GoogleSheetsModalProps {
   // Admin Account props
   settings: AppSettings;
   onUpdateAdminCredentials: (newUsername: string, newPassword: string) => Promise<boolean>;
-  initialTab?: 'categories' | 'account' | 'database' | 'github_vercel';
+  onUpdateSettings?: (updated: Partial<AppSettings>) => void;
+  initialTab?: 'categories' | 'account' | 'share_settings' | 'database' | 'github_vercel';
 }
 
 export const GoogleSheetsModal: React.FC<GoogleSheetsModalProps> = ({
@@ -77,9 +87,10 @@ export const GoogleSheetsModal: React.FC<GoogleSheetsModalProps> = ({
   onSyncCategoriesToSheets,
   settings,
   onUpdateAdminCredentials,
+  onUpdateSettings,
   initialTab = 'categories'
 }) => {
-  const [activeTab, setActiveTab] = useState<'categories' | 'account' | 'database' | 'github_vercel'>(initialTab);
+  const [activeTab, setActiveTab] = useState<'categories' | 'account' | 'share_settings' | 'database' | 'github_vercel'>(initialTab);
   const [urlInput, setUrlInput] = useState(webAppUrl);
   const [showPlainUrl, setShowPlainUrl] = useState(false);
   const [urlSavedFeedback, setUrlSavedFeedback] = useState(false);
@@ -105,6 +116,13 @@ export const GoogleSheetsModal: React.FC<GoogleSheetsModalProps> = ({
   const [accountMsg, setAccountMsg] = useState<{ text: string; type: 'success' | 'error' } | null>(null);
   const [isSavingAccount, setIsSavingAccount] = useState(false);
 
+  // Share Settings / Nozzle State
+  const [preferNativeShare, setPreferNativeShare] = useState(settings.preferNativeShare !== false);
+  const [enableWebsiteShareModal, setEnableWebsiteShareModal] = useState(settings.enableWebsiteShareModal !== false);
+  const [autoCopyToClipboard, setAutoCopyToClipboard] = useState(settings.autoCopyToClipboard !== false);
+  const [shareSavedFeedback, setShareSavedFeedback] = useState(false);
+  const [testShareSuccessMsg, setTestShareSuccessMsg] = useState<string | null>(null);
+
   useEffect(() => {
     setUrlInput(webAppUrl);
   }, [webAppUrl]);
@@ -116,6 +134,54 @@ export const GoogleSheetsModal: React.FC<GoogleSheetsModalProps> = ({
   }, [settings.adminUsername, settings.adminPasswordHash, settings.adminPassword]);
 
   if (!isOpen) return null;
+
+  const handleDownloadAppConfigFile = () => {
+    const fileContent = `// ============================================================================
+// 🔒 GLOBAL APPLICATION CONFIGURATION (Permanent Hardcoded Settings)
+// Dibuat Otomatis untuk Repository GitHub & Vercel
+// ============================================================================
+
+export const APP_CONFIG = {
+  // ⚡ URL Web App Google Apps Script Anda (Terkunci Permanen untuk semua pengunjung)
+  GOOGLE_SHEETS_WEB_APP_URL: '${webAppUrl || ''}',
+
+  // 👤 Kredensial Default Admin
+  DEFAULT_ADMIN_USERNAME: '${settings.adminUsername || 'Faiz_Fahmi_ID'}',
+  DEFAULT_ADMIN_PASSWORD: '${settings.adminPasswordHash || settings.adminPassword || 'admin123'}',
+
+  // 🏷️ Identitas Website
+  SITE_NAME: '${settings.siteName || 'fahnotes'}',
+  AUTHOR_NAME: '${settings.authorName || 'Faiz_Fahmi_ID'}',
+
+  // 📂 Kategori Default
+  DEFAULT_CATEGORIES: ${JSON.stringify(categories, null, 2)}
+};
+
+export function getActiveGoogleSheetsUrl(runtimeFallbackUrl?: string): string {
+  const envUrl = (import.meta as any)?.env?.VITE_GOOGLE_SHEETS_URL;
+  if (envUrl && typeof envUrl === 'string' && envUrl.trim().startsWith('http')) {
+    return envUrl.trim();
+  }
+  if (APP_CONFIG.GOOGLE_SHEETS_WEB_APP_URL && APP_CONFIG.GOOGLE_SHEETS_WEB_APP_URL.trim().startsWith('http')) {
+    return APP_CONFIG.GOOGLE_SHEETS_WEB_APP_URL.trim();
+  }
+  if (runtimeFallbackUrl && typeof runtimeFallbackUrl === 'string' && runtimeFallbackUrl.trim().startsWith('http')) {
+    return runtimeFallbackUrl.trim();
+  }
+  return '';
+}
+`;
+
+    const blob = new Blob([fileContent], { type: 'text/typescript;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'appConfig.ts';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  };
 
   const handleCopy = () => {
     navigator.clipboard.writeText(CODE_GS_SCRIPT);
@@ -237,6 +303,63 @@ export const GoogleSheetsModal: React.FC<GoogleSheetsModalProps> = ({
     }
   };
 
+  // --- Share Nozzle Handlers ---
+  const handleTogglePreferNative = () => {
+    const nextVal = !preferNativeShare;
+    setPreferNativeShare(nextVal);
+    onUpdateSettings?.({ preferNativeShare: nextVal });
+    setShareSavedFeedback(true);
+    setTimeout(() => setShareSavedFeedback(false), 2500);
+  };
+
+  const handleToggleEnableModal = () => {
+    const nextVal = !enableWebsiteShareModal;
+    setEnableWebsiteShareModal(nextVal);
+    onUpdateSettings?.({ enableWebsiteShareModal: nextVal });
+    setShareSavedFeedback(true);
+    setTimeout(() => setShareSavedFeedback(false), 2500);
+  };
+
+  const handleToggleAutoCopy = () => {
+    const nextVal = !autoCopyToClipboard;
+    setAutoCopyToClipboard(nextVal);
+    onUpdateSettings?.({ autoCopyToClipboard: nextVal });
+    setShareSavedFeedback(true);
+    setTimeout(() => setShareSavedFeedback(false), 2500);
+  };
+
+  const handleTestLiveShare = () => {
+    const sampleNote: Note = notes[0] || {
+      id: 'test-sample',
+      title: 'Uji Coba Fitur Bagikan Bawaan HP',
+      slug: 'uji-coba-fitur-bagikan-bawaan-hp',
+      description: 'Ini adalah catatan contoh untuk menguji menu bagikan bawaan perangkat ponsel.',
+      category: 'Tutorial',
+      blocks: [],
+      isPublic: true,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+      author: settings.authorName || 'Admin'
+    };
+
+    triggerSmartShare({
+      note: sampleNote,
+      settings: {
+        preferNativeShare,
+        enableWebsiteShareModal,
+        autoCopyToClipboard
+      },
+      onShowToast: (msg, type) => {
+        setTestShareSuccessMsg(`${type === 'success' ? '✅' : 'ℹ️'} ${msg}`);
+        setTimeout(() => setTestShareSuccessMsg(null), 3500);
+      },
+      onOpenModalFallback: () => {
+        setTestShareSuccessMsg('💻 Mode Layar Komputer Terdeteksi: Modal popup website dengan Barcode QR Code siap dibuka!');
+        setTimeout(() => setTestShareSuccessMsg(null), 3500);
+      }
+    });
+  };
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/60 backdrop-blur-xs">
       <div className="nb-box w-full max-w-2xl max-h-[92vh] flex flex-col overflow-hidden bg-white">
@@ -288,7 +411,19 @@ export const GoogleSheetsModal: React.FC<GoogleSheetsModalProps> = ({
             }`}
           >
             <User className="w-3.5 h-3.5 stroke-[2.5]" />
-            <span>Akun Admin (Username &amp; Password)</span>
+            <span>Akun Admin</span>
+          </button>
+
+          <button
+            onClick={() => setActiveTab('share_settings')}
+            className={`nb-btn px-3.5 py-1.5 text-xs font-black gap-1.5 transition-all shrink-0 ${
+              activeTab === 'share_settings'
+                ? 'bg-[#F472B6] text-black shadow-[2px_2px_0px_#000] border-2 border-black'
+                : 'bg-white text-black/70 hover:text-black border-2 border-transparent'
+            }`}
+          >
+            <Sliders className="w-3.5 h-3.5 stroke-[2.5]" />
+            <span>⚙️ Pengaturan Bagikan &amp; Nozzle</span>
           </button>
 
           <button
@@ -647,7 +782,219 @@ export const GoogleSheetsModal: React.FC<GoogleSheetsModalProps> = ({
           )}
 
           {/* ========================================================================= */}
-          {/* TAB 3: GOOGLE SPREADSHEET (DATABASE ENGINE & SCRIPT CODE.GS) */}
+          {/* TAB 3: PENGATURAN BAGIKAN & NOZZLE SAKLAR ON/OFF (CROSS-DEVICE SHARE) */}
+          {/* ========================================================================= */}
+          {activeTab === 'share_settings' && (
+            <div className="space-y-4">
+              
+              {/* Header Info Box */}
+              <div className="p-3.5 rounded-xl border-2 border-black bg-[#FDF2F8] flex items-start gap-3 shadow-[2px_2px_0px_#000]">
+                <div className="w-8 h-8 rounded-lg bg-[#F472B6] border-2 border-black flex items-center justify-center shrink-0 mt-0.5 shadow-[1px_1px_0px_#000]">
+                  <Sliders className="w-4 h-4 text-black stroke-[2.5]" />
+                </div>
+                <div className="flex-1 text-xs">
+                  <div className="font-black text-xs text-pink-950 uppercase tracking-wider flex items-center justify-between">
+                    <span>Pengaturan Nozzle / Saklar Menu Bagikan Catatan</span>
+                    <span className="text-[10px] px-2 py-0.5 rounded bg-white border border-black font-black text-black">
+                      Lintas Perangkat (Mobile &amp; PC)
+                    </span>
+                  </div>
+                  <p className="mt-1 font-bold text-pink-950/80 text-[11px] leading-relaxed">
+                    Atur perilaku tombol <strong>"Bagikan"</strong> saat diklik pengunjung atau admin di perangkat HP/Smartphone maupun Laptop/Desktop.
+                  </p>
+                </div>
+              </div>
+
+              {shareSavedFeedback && (
+                <div className="p-3 rounded-xl border-2 border-black bg-[#DCFCE7] text-emerald-950 flex items-center gap-2 text-xs font-black shadow-[2px_2px_0px_#000] animate-pulse">
+                  <CheckCircle2 className="w-4 h-4 text-emerald-700 stroke-[2.5] shrink-0" />
+                  <span>Pengaturan Nozzle Berhasil Disimpan Otomatis!</span>
+                </div>
+              )}
+
+              {testShareSuccessMsg && (
+                <div className="p-3 rounded-xl border-2 border-black bg-[#E0E7FF] text-indigo-950 flex items-center gap-2 text-xs font-black shadow-[2px_2px_0px_#000]">
+                  <Sparkles className="w-4 h-4 text-indigo-700 stroke-[2.5] shrink-0" />
+                  <span>{testShareSuccessMsg}</span>
+                </div>
+              )}
+
+              {/* DAFTAR NOZZLE SAKLAR (SWITCHES) */}
+              <div className="space-y-3">
+
+                {/* NOZZLE 1: WAJIB MENU BAWAAN HP (NATIVE SHARE) */}
+                <div className={`p-4 rounded-xl border-2 border-black transition-all shadow-[3px_3px_0px_#000] ${
+                  preferNativeShare ? 'bg-[#F0FDF4]' : 'bg-[#FAFAFA]'
+                }`}>
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                    <div className="space-y-1 flex-1">
+                      <div className="flex items-center gap-2">
+                        <Smartphone className="w-4 h-4 text-black stroke-[2.5]" />
+                        <span className="font-black text-xs uppercase tracking-wider text-black">
+                          Nozzle 1: Wajib Menu Bagikan Bawaan HP (Native OS Share)
+                        </span>
+                        <span className={`text-[9px] px-2 py-0.5 rounded-md border border-black font-black uppercase ${
+                          preferNativeShare ? 'bg-[#22C55E] text-white' : 'bg-zinc-200 text-zinc-700'
+                        }`}>
+                          {preferNativeShare ? '● AKTIF (WAJIB HP)' : '○ NON-AKTIF'}
+                        </span>
+                      </div>
+                      <p className="text-[11px] font-semibold text-black/80 leading-relaxed">
+                        Saat tombol <strong>Bagikan</strong> ditekan di Smartphone/HP, sistem <strong>WAJIB</strong> langsung memicu menu share bawaan sistem operasi ponsel (WhatsApp, Telegram, Bluetooth, Instagram Story, Email, dll.). Website <strong>tidak akan</strong> memunculkan popup modal pada layar HP.
+                      </p>
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={handleTogglePreferNative}
+                      className={`nb-btn px-4 py-2 text-xs font-black gap-2 shrink-0 border-2 border-black shadow-[2px_2px_0px_#000] transition-all ${
+                        preferNativeShare
+                          ? 'bg-[#22C55E] hover:bg-[#16A34A] text-white'
+                          : 'bg-zinc-200 hover:bg-zinc-300 text-black'
+                      }`}
+                    >
+                      {preferNativeShare ? (
+                        <>
+                          <ToggleRight className="w-5 h-5 stroke-[2.5]" />
+                          <span>Nozzle Aktif</span>
+                        </>
+                      ) : (
+                        <>
+                          <ToggleLeft className="w-5 h-5 stroke-[2.5]" />
+                          <span>Nozzle Non-Aktif</span>
+                        </>
+                      )}
+                    </button>
+                  </div>
+                </div>
+
+                {/* NOZZLE 2: MODAL POPUP WEBSITE DI DESKTOP / PC DENGAN QR CODE */}
+                <div className={`p-4 rounded-xl border-2 border-black transition-all shadow-[3px_3px_0px_#000] ${
+                  enableWebsiteShareModal ? 'bg-[#EFF6FF]' : 'bg-[#FAFAFA]'
+                }`}>
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                    <div className="space-y-1 flex-1">
+                      <div className="flex items-center gap-2">
+                        <Laptop className="w-4 h-4 text-black stroke-[2.5]" />
+                        <span className="font-black text-xs uppercase tracking-wider text-black">
+                          Nozzle 2: Tampilkan Modal Popup Website di Laptop / PC
+                        </span>
+                        <span className={`text-[9px] px-2 py-0.5 rounded-md border border-black font-black uppercase ${
+                          enableWebsiteShareModal ? 'bg-[#3B82F6] text-white' : 'bg-zinc-200 text-zinc-700'
+                        }`}>
+                          {enableWebsiteShareModal ? '● AKTIF (DESKTOP)' : '○ NON-AKTIF'}
+                        </span>
+                      </div>
+                      <p className="text-[11px] font-semibold text-black/80 leading-relaxed">
+                        Saat dibuka di Komputer/Laptop, memunculkan jendela dialog interaktif dengan <strong>Barcode QR Code</strong> untuk discan langsung oleh kamera ponsel pengunjung serta pilihan tombol sosial media.
+                      </p>
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={handleToggleEnableModal}
+                      className={`nb-btn px-4 py-2 text-xs font-black gap-2 shrink-0 border-2 border-black shadow-[2px_2px_0px_#000] transition-all ${
+                        enableWebsiteShareModal
+                          ? 'bg-[#3B82F6] hover:bg-[#2563EB] text-white'
+                          : 'bg-zinc-200 hover:bg-zinc-300 text-black'
+                      }`}
+                    >
+                      {enableWebsiteShareModal ? (
+                        <>
+                          <ToggleRight className="w-5 h-5 stroke-[2.5]" />
+                          <span>Nozzle Aktif</span>
+                        </>
+                      ) : (
+                        <>
+                          <ToggleLeft className="w-5 h-5 stroke-[2.5]" />
+                          <span>Nozzle Non-Aktif</span>
+                        </>
+                      )}
+                    </button>
+                  </div>
+                </div>
+
+                {/* NOZZLE 3: SALIN OTOMATIS JIKA FALLBACK */}
+                <div className={`p-4 rounded-xl border-2 border-black transition-all shadow-[3px_3px_0px_#000] ${
+                  autoCopyToClipboard ? 'bg-[#FFFBEB]' : 'bg-[#FAFAFA]'
+                }`}>
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                    <div className="space-y-1 flex-1">
+                      <div className="flex items-center gap-2">
+                        <Copy className="w-4 h-4 text-black stroke-[2.5]" />
+                        <span className="font-black text-xs uppercase tracking-wider text-black">
+                          Nozzle 3: Salin Otomatis ke Papan Klip (Auto Clipboard)
+                        </span>
+                        <span className={`text-[9px] px-2 py-0.5 rounded-md border border-black font-black uppercase ${
+                          autoCopyToClipboard ? 'bg-[#F59E0B] text-black' : 'bg-zinc-200 text-zinc-700'
+                        }`}>
+                          {autoCopyToClipboard ? '● AKTIF' : '○ NON-AKTIF'}
+                        </span>
+                      </div>
+                      <p className="text-[11px] font-semibold text-black/80 leading-relaxed">
+                        Jika browser tidak memiliki menu bawaan, otomatis menyalin tautan catatan ke clipboard dan memunculkan toast konfirmasi.
+                      </p>
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={handleToggleAutoCopy}
+                      className={`nb-btn px-4 py-2 text-xs font-black gap-2 shrink-0 border-2 border-black shadow-[2px_2px_0px_#000] transition-all ${
+                        autoCopyToClipboard
+                          ? 'bg-[#F59E0B] hover:bg-[#D97706] text-black'
+                          : 'bg-zinc-200 hover:bg-zinc-300 text-black'
+                      }`}
+                    >
+                      {autoCopyToClipboard ? (
+                        <>
+                          <ToggleRight className="w-5 h-5 stroke-[2.5]" />
+                          <span>Nozzle Aktif</span>
+                        </>
+                      ) : (
+                        <>
+                          <ToggleLeft className="w-5 h-5 stroke-[2.5]" />
+                          <span>Nozzle Non-Aktif</span>
+                        </>
+                      )}
+                    </button>
+                  </div>
+                </div>
+
+              </div>
+
+              {/* UJI COBA LANGSUNG & STATUS PERANGKAT */}
+              <div className="p-4 rounded-xl border-2 border-black bg-white space-y-3 shadow-[3px_3px_0px_#000]">
+                <div className="flex items-center justify-between border-b-2 border-black pb-2">
+                  <div className="font-black text-xs uppercase tracking-wider flex items-center gap-2">
+                    <Zap className="w-4 h-4 text-amber-500 stroke-[2.5]" />
+                    <span>Uji Coba Langsung di Perangkat Ini</span>
+                  </div>
+                  <div className="text-[10px] font-bold text-black/70">
+                    Browser: {typeof navigator !== 'undefined' && typeof navigator.share === 'function' ? '✅ Didukung' : '⚠️ Non-Native'}
+                  </div>
+                </div>
+
+                <p className="text-[11px] font-bold text-black/80">
+                  Klik tombol di bawah untuk melihat bagaimana sistem merespons konfigurasi nozzle pada browser / perangkat Anda saat ini:
+                </p>
+
+                <div className="flex flex-col sm:flex-row gap-2">
+                  <button
+                    type="button"
+                    onClick={handleTestLiveShare}
+                    className="nb-btn bg-[#FFD233] hover:bg-[#FFE066] text-black flex-1 py-2.5 text-xs font-black gap-2 shadow-[3px_3px_0px_#000] border-2 border-black"
+                  >
+                    <Share2 className="w-4 h-4 stroke-[2.5]" />
+                    <span>🧪 Uji Coba Bagikan Sekarang (Live Test)</span>
+                  </button>
+                </div>
+              </div>
+
+            </div>
+          )}
+
+          {/* ========================================================================= */}
+          {/* TAB 4: GOOGLE SPREADSHEET (DATABASE ENGINE & SCRIPT CODE.GS) */}
           {/* ========================================================================= */}
           {activeTab === 'database' && (
             <div className="space-y-4">
@@ -935,14 +1282,25 @@ export const GoogleSheetsModal: React.FC<GoogleSheetsModalProps> = ({
 
               {/* METODE 1: GITHUB REPO (src/config/appConfig.ts) */}
               <div className="p-4 rounded-xl border-2 border-black bg-[#F0FDF4] space-y-3 shadow-[3px_3px_0px_#000]">
-                <div className="flex items-center justify-between">
+                <div className="flex flex-wrap items-center justify-between gap-2">
                   <div className="font-black text-xs uppercase tracking-wider text-emerald-950 flex items-center gap-1.5">
                     <ShieldCheck className="w-4 h-4 text-emerald-700 stroke-[2.5]" />
-                    <span>Metode 1 (Rekomendasi): Simpan di GitHub (`src/config/appConfig.ts`)</span>
+                    <span>Metode 1 (Rekomendasi 100% Permanen): Simpan di GitHub (`src/config/appConfig.ts`)</span>
                   </div>
-                  <button
-                    onClick={() => {
-                      const snippet = `export const APP_CONFIG = {
+                  
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={handleDownloadAppConfigFile}
+                      className="nb-btn bg-[#FFD233] hover:bg-[#FFE066] text-black px-3 py-1 text-xs font-black gap-1.5 shadow-[2px_2px_0px_#000]"
+                      title="Download file appConfig.ts siap pakai untuk langsung ditimpa di repo GitHub"
+                    >
+                      <Download className="w-3.5 h-3.5 stroke-[2.5] text-black" />
+                      <span>Unduh File appConfig.ts</span>
+                    </button>
+
+                    <button
+                      onClick={() => {
+                        const snippet = `export const APP_CONFIG = {
   // URL Web App Google Apps Script Anda
   GOOGLE_SHEETS_WEB_APP_URL: '${webAppUrl || ''}',
 
@@ -957,28 +1315,29 @@ export const GoogleSheetsModal: React.FC<GoogleSheetsModalProps> = ({
   // Kategori
   DEFAULT_CATEGORIES: ${JSON.stringify(categories, null, 2)}
 };`;
-                      navigator.clipboard.writeText(snippet);
-                      setCopiedAppConfig(true);
-                      setTimeout(() => setCopiedAppConfig(false), 2500);
-                    }}
-                    className="nb-btn bg-[#2DD4BF] hover:bg-[#5EEAD4] text-black px-3 py-1 text-xs font-black gap-1.5 shadow-[2px_2px_0px_#000]"
-                  >
-                    {copiedAppConfig ? (
-                      <>
-                        <Check className="w-3.5 h-3.5 stroke-[3] text-emerald-900" />
-                        <span>Tersalin!</span>
-                      </>
-                    ) : (
-                      <>
-                        <Copy className="w-3.5 h-3.5" />
-                        <span>Salin Kode appConfig.ts</span>
-                      </>
-                    )}
-                  </button>
+                        navigator.clipboard.writeText(snippet);
+                        setCopiedAppConfig(true);
+                        setTimeout(() => setCopiedAppConfig(false), 2500);
+                      }}
+                      className="nb-btn bg-[#2DD4BF] hover:bg-[#5EEAD4] text-black px-3 py-1 text-xs font-black gap-1.5 shadow-[2px_2px_0px_#000]"
+                    >
+                      {copiedAppConfig ? (
+                        <>
+                          <Check className="w-3.5 h-3.5 stroke-[3] text-emerald-900" />
+                          <span>Tersalin!</span>
+                        </>
+                      ) : (
+                        <>
+                          <Copy className="w-3.5 h-3.5" />
+                          <span>Salin Kode</span>
+                        </>
+                      )}
+                    </button>
+                  </div>
                 </div>
 
                 <p className="text-[11px] font-bold text-emerald-950/80 leading-relaxed">
-                  Buka repository GitHub pribadi Anda, buka file <strong><code>src/config/appConfig.ts</code></strong>, tempelkan kode di bawah ini, lalu commit. Begitu Anda push, Vercel otomatis build ulang dan link Google Sheets akan <strong>selamanya aktif</strong> untuk semua pengunjung!
+                  Buka repository GitHub pribadi Anda, buka file <strong><code>src/config/appConfig.ts</code></strong>, timpa dengan file yang Anda unduh atau tempelkan kode di bawah ini, lalu commit/push. Vercel otomatis build ulang dan link Google Sheets akan <strong>100% selamanya permanen</strong> untuk semua pengunjung di seluruh dunia tanpa perlu input ulang!
                 </p>
 
                 <pre className="p-3 bg-[#1E293B] text-[#38BDF8] rounded-xl border-2 border-black text-[10px] font-mono max-h-44 overflow-y-auto shadow-inner">

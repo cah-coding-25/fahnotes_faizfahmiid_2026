@@ -7,6 +7,28 @@ const STORAGE_KEY_NOTES = 'fahnotes_data_v2';
 const STORAGE_KEY_SETTINGS = 'fahnotes_settings_vault_v3';
 const STORAGE_KEY_SETTINGS_LEGACY = 'fahnotes_settings_v2';
 const STORAGE_KEY_CATEGORIES = 'fahnotes_categories_v2';
+const STORAGE_KEY_HARDLOCKED_URL = 'fahnotes_permanent_sheets_url';
+const STORAGE_KEY_BACKUP_URL = 'fahnotes_sheets_url_locked';
+
+export function getHardlockedSheetsUrl(): string {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY_HARDLOCKED_URL) || localStorage.getItem(STORAGE_KEY_BACKUP_URL);
+    if (raw && typeof raw === 'string' && raw.trim().startsWith('http')) {
+      return raw.trim();
+    }
+  } catch {}
+  return '';
+}
+
+export function setHardlockedSheetsUrl(url: string): void {
+  try {
+    const clean = url ? url.trim() : '';
+    if (clean && clean.startsWith('http')) {
+      localStorage.setItem(STORAGE_KEY_HARDLOCKED_URL, clean);
+      localStorage.setItem(STORAGE_KEY_BACKUP_URL, clean);
+    }
+  } catch {}
+}
 
 export const DEFAULT_CATEGORIES: string[] = APP_CONFIG.DEFAULT_CATEGORIES || [
   'BAT Script',
@@ -26,7 +48,10 @@ export const DEFAULT_SETTINGS: AppSettings = {
   isSheetsConnected: Boolean(getActiveGoogleSheetsUrl()),
   siteName: APP_CONFIG.SITE_NAME || 'fahnotes',
   authorName: APP_CONFIG.AUTHOR_NAME || 'Faiz_Fahmi_ID',
-  categories: DEFAULT_CATEGORIES
+  categories: DEFAULT_CATEGORIES,
+  preferNativeShare: true,
+  enableWebsiteShareModal: true,
+  autoCopyToClipboard: true
 };
 
 export function getLocalNotes(): Note[] {
@@ -85,13 +110,17 @@ export function saveLocalCategories(categories: string[]): void {
 export function getLocalSettings(): AppSettings {
   try {
     const activeUrl = getActiveGoogleSheetsUrl();
+    const hardlockedUrl = getHardlockedSheetsUrl();
 
     // 1. Check secure multi-layer vault key
     const vaultRaw = localStorage.getItem(STORAGE_KEY_SETTINGS);
     if (vaultRaw) {
       const decrypted = decryptVaultData<AppSettings>(vaultRaw, DEFAULT_SETTINGS);
       if (decrypted && decrypted.adminUsername) {
-        const resolvedUrl = activeUrl || decrypted.googleSheetsWebAppUrl || '';
+        const resolvedUrl = activeUrl || hardlockedUrl || decrypted.googleSheetsWebAppUrl || '';
+        if (resolvedUrl) {
+          setHardlockedSheetsUrl(resolvedUrl);
+        }
         return {
           ...DEFAULT_SETTINGS,
           ...decrypted,
@@ -105,7 +134,10 @@ export function getLocalSettings(): AppSettings {
     const legacyRaw = localStorage.getItem(STORAGE_KEY_SETTINGS_LEGACY);
     if (legacyRaw) {
       const parsed = JSON.parse(legacyRaw);
-      const resolvedUrl = activeUrl || parsed.googleSheetsWebAppUrl || '';
+      const resolvedUrl = activeUrl || hardlockedUrl || parsed.googleSheetsWebAppUrl || '';
+      if (resolvedUrl) {
+        setHardlockedSheetsUrl(resolvedUrl);
+      }
       const migrated = {
         ...DEFAULT_SETTINGS,
         ...parsed,
@@ -117,9 +149,15 @@ export function getLocalSettings(): AppSettings {
       return migrated;
     }
 
-    // 3. Default initialization
-    saveLocalSettings(DEFAULT_SETTINGS);
-    return DEFAULT_SETTINGS;
+    // 3. Default initialization with hardlock if present
+    const bestUrl = activeUrl || hardlockedUrl || DEFAULT_SETTINGS.googleSheetsWebAppUrl || '';
+    const initial = {
+      ...DEFAULT_SETTINGS,
+      googleSheetsWebAppUrl: bestUrl,
+      isSheetsConnected: Boolean(bestUrl)
+    };
+    saveLocalSettings(initial);
+    return initial;
   } catch {
     return DEFAULT_SETTINGS;
   }
@@ -127,7 +165,24 @@ export function getLocalSettings(): AppSettings {
 
 export function saveLocalSettings(settings: AppSettings): void {
   try {
-    const encrypted = encryptVaultData(settings);
+    // Preserve existing hardlocked URL if incoming is empty
+    let urlToSave = settings.googleSheetsWebAppUrl;
+    if (urlToSave && urlToSave.trim().startsWith('http')) {
+      setHardlockedSheetsUrl(urlToSave.trim());
+    } else {
+      const existingHardlock = getHardlockedSheetsUrl();
+      if (existingHardlock) {
+        urlToSave = existingHardlock;
+      }
+    }
+
+    const normalizedSettings: AppSettings = {
+      ...settings,
+      googleSheetsWebAppUrl: urlToSave || '',
+      isSheetsConnected: Boolean(urlToSave)
+    };
+
+    const encrypted = encryptVaultData(normalizedSettings);
     localStorage.setItem(STORAGE_KEY_SETTINGS, encrypted);
     // Remove plain legacy copy if present
     localStorage.removeItem(STORAGE_KEY_SETTINGS_LEGACY);
