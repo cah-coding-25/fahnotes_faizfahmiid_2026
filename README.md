@@ -2,7 +2,7 @@
 > **Dibuat & Dikelola Oleh:** **`by: Faiz_Fahmi_ID`**  
 > **Versi Aplikasi:** `v2.6.0 (Production Edition)`  
 > **Lisensi & Hak Cipta:** Open Blueprint & Private Architecture by **Faiz_Fahmi_ID**  
-> **Website URL:** [fahnotes Live App](https://ais-pre-2pdcqhq7v2jegwnouv5bo7-749284898574.asia-east1.run.app)
+> **Website URL:** [fahnotes Live App](https://fahnotes.vercel.app/)
 
 ---
 
